@@ -3,7 +3,6 @@ import { Shield, Phone, Lock, CheckCircle, ChevronRight, ArrowLeft } from 'lucid
 import { auth } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-// Step constants
 const STEP_MOBILE   = 'mobile'
 const STEP_OTP      = 'otp'
 const STEP_REGISTER = 'register'
@@ -12,7 +11,7 @@ const STEP_CONSENT  = 'consent'
 const PUROKS = ['Purok 1','Purok 2','Purok 3','Purok 4','Purok 5','Purok 6','Purok 7','Purok 8']
 
 export default function LoginPage() {
-  const { signIn } = useAuth()
+  const { signIn, refreshProfile } = useAuth()
   const [step, setStep]       = useState(STEP_MOBILE)
   const [mobile, setMobile]   = useState('')
   const [otp, setOtp]         = useState(['','','','','',''])
@@ -20,14 +19,13 @@ export default function LoginPage() {
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
-  const [otpSent, setOtpSent] = useState(false)
+  const [verifiedData, setVerifiedData] = useState(null) // { userId, phone, isNewUser }
 
   // ── Step 1: Send OTP ───────────────────────────────
   async function handleSendOTP(e) {
     e.preventDefault()
     setError('')
 
-    // Validate PH mobile format
     if (!/^09\d{9}$/.test(mobile)) {
       setError('Mangyaring maglagay ng tamang mobile number (09XXXXXXXXX).')
       return
@@ -38,7 +36,6 @@ export default function LoginPage() {
     setLoading(false)
 
     if (err) { setError(err.message); return }
-    setOtpSent(true)
     setStep(STEP_OTP)
   }
 
@@ -55,11 +52,16 @@ export default function LoginPage() {
 
     if (err) { setError(err.message); return }
 
-    // New user → registration, existing → straight to dashboard
-    // (In prod: check Supabase if profile exists)
-    const isNewUser = !data.user // demo: always show register
-    if (true) { setStep(STEP_REGISTER) }
-    else { signIn(data.user) }
+    setVerifiedData(data)
+
+    if (data?.isNewUser || !data?.hasProfile) {
+      // New user — collect registration info
+      setStep(STEP_REGISTER)
+    } else {
+      // Existing user — load profile and go to dashboard
+      await refreshProfile?.()
+      signIn({ id: data.userId, mobile, role: 'resident' })
+    }
   }
 
   // ── OTP input handling ─────────────────────────────
@@ -68,10 +70,7 @@ export default function LoginPage() {
     const next = [...otp]
     next[idx] = val
     setOtp(next)
-    // Auto-advance
-    if (val && idx < 5) {
-      document.getElementById(`otp-${idx + 1}`)?.focus()
-    }
+    if (val && idx < 5) document.getElementById(`otp-${idx + 1}`)?.focus()
   }
 
   function handleOtpKeyDown(e, idx) {
@@ -89,24 +88,29 @@ export default function LoginPage() {
     setStep(STEP_CONSENT)
   }
 
-  // ── Step 4: Consent → complete ────────────────────
+  // ── Step 4: Consent → save profile + sign in ──────
   async function handleConsentSubmit(e) {
     e.preventDefault()
     if (!consent) { setError('Kinakailangan ang iyong pahintulot bago magpatuloy.'); return }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
-    setLoading(false)
 
-    // Log consent with timestamp (stored in DB in production)
-    console.log('[RA 10173 Consent Logged]', {
-      mobile,
-      full_name: form.full_name,
+    const userId   = verifiedData?.userId
+    const { error: saveErr } = await auth.saveProfile({
+      userId,
+      fullName: form.full_name,
+      mobile: `+63${mobile.slice(1)}`,
       purok: form.purok,
-      consented_at: new Date().toISOString(),
+      barangay: form.barangay,
     })
 
+    setLoading(false)
+
+    if (saveErr) { setError(saveErr.message); return }
+
+    // Refresh auth context so profile fields populate
+    await refreshProfile?.()
     signIn({
-      id: 'res-001',
+      id: userId,
       full_name: form.full_name,
       mobile,
       purok: form.purok,
@@ -164,7 +168,7 @@ export default function LoginPage() {
             <form onSubmit={handleSendOTP} className="space-y-4 animate-fade-up">
               <div>
                 <h2 className="text-lg font-bold text-stone-900 mb-1">Ilagay ang iyong mobile number</h2>
-                <p className="text-sm text-stone-500">Magpapadala kami ng one-time password (OTP).</p>
+                <p className="text-sm text-stone-500">Magpapadala kami ng one-time password (OTP) via SMS.</p>
               </div>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
@@ -199,7 +203,6 @@ export default function LoginPage() {
                 <h2 className="text-lg font-bold text-stone-900 mb-1">I-verify ang OTP</h2>
                 <p className="text-sm text-stone-500">
                   Napadala ang 6-digit code sa <strong>{mobile}</strong>.
-                  <br /><span className="text-brand-500 font-medium">(Demo: gamitin ang anumang 6 digit)</span>
                 </p>
               </div>
               <div className="flex gap-2 justify-between">
@@ -298,8 +301,8 @@ export default function LoginPage() {
                   className="mt-1 w-5 h-5 rounded accent-brand-500 flex-shrink-0"
                 />
                 <span className="text-sm text-stone-600 group-hover:text-stone-900 transition-colors">
-                  Sumasang-ayon ako na kolektahin at gamitin ang aking personal na impormasyon alinsunod sa
-                  {' '}<strong>RA 10173 (Data Privacy Act of 2012)</strong> at ang patakaran ng barangay.
+                  Sumasang-ayon ako na kolektahin at gamitin ang aking personal na impormasyon alinsunod sa{' '}
+                  <strong>RA 10173 (Data Privacy Act of 2012)</strong> at ang patakaran ng barangay.
                 </span>
               </label>
 
