@@ -145,6 +145,75 @@ export const requests = {
 
     return { data, error };
   },
+
+  async getOne(id) {
+    if (!supabase) {
+      await delay(300);
+      const req = _requests.find((r) => r.id === id);
+      return {
+        data: req ?? null,
+        error: req ? null : { message: "Not found" },
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("requests")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    return { data, error };
+  },
+};
+
+// ── QR Verification (public route) ─────────────────────
+export const verify = {
+  async checkHash(hash) {
+    if (!supabase) {
+      await delay(500);
+      const req = _requests.find(
+        (r) => r.qr_hash === hash && r.status === "approved"
+      );
+      if (!req)
+        return {
+          data: null,
+          error: { message: "Document not found or not yet approved." },
+        };
+
+      return {
+        data: {
+          reference_no: req.reference_no,
+          document_type: req.document_type,
+          status: req.status,
+          issued_date: req.updated_at,
+          barangay: DEMO_USER.barangay,
+          municipality: DEMO_USER.municipality,
+        },
+        error: null,
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("requests")
+      .select("reference_no, document_type, status, updated_at")
+      .eq("qr_hash", hash)
+      .eq("status", "approved")
+      .single();
+
+    if (error) return { data: null, error };
+
+    return {
+      data: {
+        reference_no: data.reference_no,
+        document_type: data.document_type,
+        status: data.status,
+        issued_date: data.updated_at,
+        barangay: "Barangay Mabuhay", // Fallback or dynamic fetch
+        municipality: "City Name", // Fallback or dynamic fetch
+      },
+      error: null,
+    };
+  },
 };
 
 // ── Helpers ─────────────────────────────────────────────
