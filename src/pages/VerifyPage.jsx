@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowLeft, QrCode, CheckCircle, XCircle, Search, Shield } from 'lucide-react'
 import { verify } from '../lib/supabase'
 import { formatDate } from '../lib/utils'
-import { BottomNav } from './HomePage'
+import { BottomNav } from '../lib/BottomNav'
 
 // Public route: /verify/:hash — anyone can verify document authenticity.
 // SECURITY: This endpoint returns ONLY public-safe fields.
