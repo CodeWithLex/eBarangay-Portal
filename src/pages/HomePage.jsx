@@ -6,6 +6,8 @@ import { useAuth } from '../lib/AuthContext'
 import { formatDate, statusPillClass, statusLabel } from '../lib/utils'
 import { BottomNav } from '../lib/BottomNav'
 
+export { BottomNav }
+
 export default function HomePage({ navigate }) {
   const { user, signOut } = useAuth()
   const [showNotif, setShowNotif] = useState(false)

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { toE164PH } from "./utils";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -69,8 +70,12 @@ export const auth = {
       return { error: null };
     }
 
-    // Real Supabase Auth (OTP usually needs a provider like Twilio or custom SMS hook)
-    const { error } = await supabase.auth.signInWithOtp({ phone: mobile });
+    const phone = toE164PH(mobile);
+    if (!phone) {
+      return { error: { message: "Invalid phone number format (use 09XXXXXXXXX)." } };
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({ phone });
     return { error };
   },
 
@@ -84,8 +89,13 @@ export const auth = {
       return { data: null, error: { message: "Invalid OTP" } };
     }
 
+    const phone = toE164PH(mobile);
+    if (!phone) {
+      return { data: null, error: { message: "Invalid phone number format (use 09XXXXXXXXX)." } };
+    }
+
     const { data, error } = await supabase.auth.verifyOtp({
-      phone: mobile,
+      phone,
       token: otp,
       type: "sms",
     });
