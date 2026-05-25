@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Upload, CheckCircle, FileText, ChevronDown, AlertCircle } from 'lucide-react'
 import { requests, DOCUMENT_TYPES } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { BottomNav } from './HomePage'
+import { BottomNav } from '../lib/BottomNav'
 
 export default function RequestPage({ navigate }) {
   const { user } = useAuth()

@@ -3,7 +3,7 @@ import { ArrowLeft, Clock, CheckCircle, XCircle, FileText, Download, QrCode, Ref
 import { requests } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { formatDate, formatTime, statusLabel } from '../lib/utils'
-import { BottomNav } from './HomePage'
+import { BottomNav } from '../lib/BottomNav'
 
 export default function TrackPage({ navigate }) {
   const { user } = useAuth()
