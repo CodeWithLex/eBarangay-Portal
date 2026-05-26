@@ -265,13 +265,21 @@ function RequestCard({ req, onClick }) {
 
 function ReviewModal({ req, onClose, onUpdate, isPending }) {
   const [remarks, setRemarks] = useState(req.remarks || '')
+  const [releasingDate, setReleasingDate] = useState(req.releasing_date ? req.releasing_date.split('T')[0] : '')
+  const [releasingTime, setReleasingTime] = useState(req.releasing_date ? new Date(req.releasing_date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '09:00')
   
   const handleAction = (status) => {
     if (status === 'rejected' && !remarks.trim()) {
       alert('Paki-input ang dahilan ng pag-reject.')
       return
     }
-    onUpdate({ status, remarks })
+
+    let finalReleasingDate = null
+    if (status === 'approved' && releasingDate) {
+      finalReleasingDate = `${releasingDate}T${releasingTime}:00Z`
+    }
+
+    onUpdate({ status, remarks, releasing_date: finalReleasingDate })
   }
 
   return (
@@ -337,14 +345,35 @@ function ReviewModal({ req, onClose, onUpdate, isPending }) {
               </div>
             )}
 
-            <div className="mt-6">
-              <label className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block mb-2 px-1">Admin Remarks</label>
-              <textarea 
-                className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-brand-500/20 h-24 resize-none"
-                placeholder="Ex. Please bring original for verification, Approved for pickup on..."
-                value={remarks}
-                onChange={e => setRemarks(e.target.value)}
-              />
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block mb-2 px-1">Releasing Date & Time</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="date"
+                    className="flex-1 bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-brand-500/20"
+                    value={releasingDate}
+                    onChange={e => setReleasingDate(e.target.value)}
+                  />
+                  <input 
+                    type="time"
+                    className="w-32 bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-brand-500/20"
+                    value={releasingTime}
+                    onChange={e => setReleasingTime(e.target.value)}
+                  />
+                </div>
+                <p className="text-[9px] text-stone-400 mt-1 px-1">Petsa at oras kung kailan maaaring kunin ang dokumento.</p>
+              </div>
+
+              <div>
+                <label className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block mb-2 px-1">Admin Remarks</label>
+                <textarea 
+                  className="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-brand-500/20 h-24 resize-none"
+                  placeholder="Ex. Please bring original for verification, Approved for pickup on..."
+                  value={remarks}
+                  onChange={e => setRemarks(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </div>

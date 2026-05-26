@@ -131,6 +131,17 @@ function TrackCard({ req, delay, navigate }) {
         </div>
       )}
 
+      {req.status === 'approved' && req.releasing_date && (
+        <div className="bg-brand-50 border border-brand-200 rounded-2xl p-4 mb-4 animate-pulse-subtle">
+          <div className="flex items-center gap-2 text-brand-700 font-bold text-xs mb-1">
+            <Clock size={14} /> Ready for Pickup
+          </div>
+          <p className="text-xs text-brand-900">
+            Maaari nang kunin ang iyong dokumento sa <span className="font-bold underline">{formatDate(req.releasing_date)}</span> alas-<span className="font-bold underline">{formatTime(req.releasing_date)}</span>.
+          </p>
+        </div>
+      )}
+
       {req.file_url && (
         <div className="flex items-center gap-2 mb-3 px-1">
           <FileText className="w-3.5 h-3.5 text-stone-400" />
@@ -196,6 +207,18 @@ function buildTimeline(req) {
     done: ['approved','rejected'].includes(req.status),
     current: false
   }
+  const releasing = req.releasing_date ? { 
+    label: 'Petsa ng Releasing', 
+    time: formatDate(req.releasing_date) + ' · ' + formatTime(req.releasing_date), 
+    done: req.status === 'approved', 
+    current: false 
+  } : null
+  
   const ready = { label: 'Dokumento ay handa', time: null, done: req.status === 'approved', current: false }
-  return [submitted, reviewing, approved, ready]
+  
+  const steps = [submitted, reviewing, approved]
+  if (releasing) steps.push(releasing)
+  steps.push(ready)
+  
+  return steps
 }

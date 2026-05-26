@@ -10,7 +10,12 @@ export default function RequestPage({ navigate }) {
   const queryClient = useQueryClient()
   const fileRef = useRef()
 
-  const [form, setForm] = useState({ document_type: '', purpose: '' })
+  const [form, setForm] = useState({ 
+    document_type: '', 
+    purpose: '',
+    age: user?.birth_date ? new Date().getFullYear() - new Date(user.birth_date).getFullYear() : '',
+    occupation: user?.occupation || ''
+  })
   const [file, setFile] = useState(null)
   const [consent, setConsent] = useState(false)
   const [errors, setErrors] = useState({})
@@ -44,6 +49,10 @@ export default function RequestPage({ navigate }) {
         purpose: form.purpose,
         resident_id: user.id,
         file_url,
+        metadata: {
+          age: form.age,
+          occupation: form.occupation
+        }
       })
     },
     onSuccess: (result) => {
@@ -63,6 +72,8 @@ export default function RequestPage({ navigate }) {
     const errs = {}
     if (!form.document_type)  errs.document_type = 'Pumili ng uri ng dokumento.'
     if (!form.purpose.trim()) errs.purpose = 'Ilagay ang layunin ng hiling.'
+    if (!form.age)            errs.age = 'Ilagay ang iyong edad.'
+    if (!form.occupation)     errs.occupation = 'Ilagay ang iyong trabaho.'
     if (!file)                errs.file = 'Kinakailangan ang valid ID.'
     if (!consent)             errs.consent = 'Kinakailangan ang pahintulot.'
     setErrors(errs)
@@ -201,6 +212,31 @@ export default function RequestPage({ navigate }) {
             <div className="flex justify-between items-center mt-1">
               {errors.purpose ? <FieldError msg={errors.purpose} /> : <span />}
               <span className="text-xs text-stone-300">{form.purpose.length}/300</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="section-label">Edad (Age)</p>
+              <input 
+                type="number"
+                className={`field ${errors.age ? 'border-red-300' : ''}`}
+                placeholder="Hal. 25"
+                value={form.age}
+                onChange={e => setForm(f => ({ ...f, age: e.target.value }))}
+              />
+              {errors.age && <FieldError msg={errors.age} />}
+            </div>
+            <div>
+              <p className="section-label">Trabaho</p>
+              <input 
+                type="text"
+                className={`field ${errors.occupation ? 'border-red-300' : ''}`}
+                placeholder="Hal. Magsasaka"
+                value={form.occupation}
+                onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))}
+              />
+              {errors.occupation && <FieldError msg={errors.occupation} />}
             </div>
           </div>
 
