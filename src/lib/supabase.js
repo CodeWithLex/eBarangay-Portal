@@ -151,9 +151,9 @@ export const auth = {
   },
 
   // Save profile + consent log after registration
-  async saveProfile({ userId, fullName, mobile, purok, barangay }) {
+  async saveProfile({ userId, fullName, mobile, purok, birth_date, voter_status, is_verified, barangay }) {
     if (!supabase) {
-      console.log('[Mock] Profile saved:', { userId, fullName, mobile, purok, barangay })
+      console.log('[Mock] Profile saved:', { userId, fullName, mobile, purok, birth_date, voter_status, is_verified, barangay })
       return { error: null }
     }
 
@@ -162,6 +162,9 @@ export const auth = {
       full_name: fullName,
       mobile,
       purok,
+      birth_date,
+      voter_status,
+      is_verified,
       barangay,
       consented_at: new Date().toISOString(),
     }
@@ -234,11 +237,11 @@ export const requests = {
     return { data, error }
   },
 
-  async updateStatus(id, { status, remarks, reviewed_by, releasing_date }) {
+  async updateStatus(id, { status, remarks, reviewed_by, releasing_date, doc_hash, expires_at }) {
     if (!supabase) {
       const idx = _requests.findIndex(r => r.id === id)
       if (idx === -1) return { error: { message: 'Not found' } }
-      _requests[idx] = { ..._requests[idx], status, remarks, reviewed_by, releasing_date, updated_at: new Date().toISOString() }
+      _requests[idx] = { ..._requests[idx], status, remarks, reviewed_by, releasing_date, doc_hash, expires_at, updated_at: new Date().toISOString() }
       return { data: _requests[idx], error: null }
     }
     const { data, error } = await supabase
@@ -248,6 +251,8 @@ export const requests = {
         remarks, 
         reviewed_by,
         releasing_date,
+        doc_hash,
+        expires_at,
         updated_at: new Date().toISOString() 
       })
       .eq('id', id)
@@ -261,7 +266,7 @@ export const requests = {
 export const verify = {
   async checkHash(hash) {
     if (!supabase) {
-      const req = _requests.find(r => r.qr_hash === hash && r.status === 'approved')
+      const req = _requests.find(r => (r.doc_hash === hash || r.qr_hash === hash) && r.status === 'approved')
       if (!req) return { data: null, error: { message: 'Document not found or not yet approved.' } }
       return {
         data: {
@@ -269,6 +274,10 @@ export const verify = {
           document_type: req.document_type,
           status: req.status,
           issued_date: req.updated_at,
+          resident_id: req.resident_id,
+          created_at: req.created_at,
+          doc_hash: req.doc_hash || req.qr_hash,
+          expires_at: req.expires_at,
           barangay: DEMO_USER.barangay,
           municipality: DEMO_USER.municipality,
         },
@@ -278,8 +287,8 @@ export const verify = {
 
     const { data, error } = await supabase
       .from('requests')
-      .select('reference_no, document_type, status, updated_at, profiles(barangay, municipality)')
-      .eq('qr_hash', hash)
+      .select('reference_no, document_type, status, created_at, updated_at, doc_hash, expires_at, resident_id, profiles(barangay, municipality)')
+      .eq('doc_hash', hash)
       .eq('status', 'approved')
       .single()
 
@@ -291,6 +300,10 @@ export const verify = {
         document_type: data.document_type,
         status: data.status,
         issued_date: data.updated_at,
+        created_at: data.created_at,
+        resident_id: data.resident_id,
+        doc_hash: data.doc_hash,
+        expires_at: data.expires_at,
         barangay: data.profiles?.barangay ?? 'Barangay Mabuhay',
         municipality: data.profiles?.municipality ?? '',
       },

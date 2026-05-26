@@ -1,8 +1,17 @@
 import { useState } from 'react'
-import { ArrowLeft, QrCode, CheckCircle, XCircle, Search, Shield } from 'lucide-react'
+import { ArrowLeft, QrCode, CheckCircle, XCircle, Search, Shield, Clock } from 'lucide-react'
 import { verify } from '../lib/supabase'
-import { formatDate } from '../lib/utils'
+import { formatDate, formatTime } from '../lib/utils'
 import { BottomNav } from '../lib/BottomNav'
+
+async function generateDocHash(data) {
+  const payload = `${data.reference_no}|${data.resident_id}|${data.document_type}|${data.created_at}`
+  const encoder = new TextEncoder()
+  const d = encoder.encode(payload)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', d)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 // Public route: /verify/:hash — anyone can verify document authenticity.
 // SECURITY: This endpoint returns ONLY public-safe fields.
@@ -13,14 +22,36 @@ export default function VerifyPage({ navigate }) {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [checked, setChecked] = useState(false)
+  const [isTampered, setIsTampered] = useState(false)
+  const [isExpired, setIsExpired] = useState(false)
 
   async function handleVerify(e) {
     e.preventDefault()
     if (!hash.trim()) return
     setLoading(true)
     setChecked(false)
+    setIsTampered(false)
+    setIsExpired(false)
+
     const { data, error } = await verify.checkHash(hash.trim())
-    setResult(error ? { error: error.message } : data)
+    
+    if (data && !error) {
+      // Re-calculate hash to ensure it matches the metadata (Tamper Proofing)
+      const calculatedHash = await generateDocHash(data)
+      if (calculatedHash !== data.doc_hash) {
+        setIsTampered(true)
+      }
+      
+      // Check expiry
+      if (data.expires_at && new Date(data.expires_at) < new Date()) {
+        setIsExpired(true)
+      }
+      
+      setResult(data)
+    } else {
+      setResult({ error: error?.message || 'Hindi nahanap ang dokumento.' })
+    }
+
     setChecked(true)
     setLoading(false)
   }
@@ -102,27 +133,54 @@ export default function VerifyPage({ navigate }) {
 
         {/* Result */}
         {checked && result && !result.error && (
-          <div className="card border-2 border-brand-300 animate-fade-up">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
-                <CheckCircle className="w-6 h-6 text-brand-600" />
+          <div className={`card border-2 animate-fade-up ${isTampered ? 'border-red-500 bg-red-50' : isExpired ? 'border-amber-500 bg-amber-50' : 'border-brand-300'}`}>
+            
+            {isTampered ? (
+              <div className="flex items-center gap-3 mb-4 p-3 bg-red-600 text-white rounded-xl shadow-lg">
+                <Shield className="w-8 h-8 animate-pulse" />
+                <div>
+                  <p className="font-bold text-sm">⚠️ WARNING: DOCUMENT ALTERED</p>
+                  <p className="text-[10px] opacity-90">Ang dokumentong ito ay niretoke o hindi tumutugma sa records.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-brand-800">Authenticated</p>
-                <p className="text-xs text-brand-600">Legítimong dokumento</p>
+            ) : isExpired ? (
+              <div className="flex items-center gap-3 mb-4 p-3 bg-amber-500 text-white rounded-xl shadow-lg">
+                <Clock className="w-8 h-8" />
+                <div>
+                  <p className="font-bold text-sm">DOCUMENT EXPIRED</p>
+                  <p className="text-[10px] opacity-90">Ang dokumentong ito ay lumampas na sa validity date.</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-6 h-6 text-brand-600" />
+                </div>
+                <div>
+                  <p className="font-bold text-brand-800 uppercase tracking-tight">Verified & Authentic</p>
+                  <p className="text-[10px] text-brand-600">Lehitimong dokumento mula sa barangay.</p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2.5">
               <VerifyRow label="Document Type" value={result.document_type} />
               <VerifyRow label="Reference No." value={result.reference_no} mono />
-              <VerifyRow label="Status" value="Approved ✓" highlight />
-              <VerifyRow label="Issued" value={formatDate(result.issued_date)} />
+              <VerifyRow label="Status" value={isExpired ? "Expired" : "Approved ✓"} highlight={!isExpired} />
+              <VerifyRow label="Issued On" value={formatDate(result.issued_date)} />
+              {result.expires_at && (
+                <VerifyRow label="Valid Until" value={formatDate(result.expires_at)} highlight={isExpired} />
+              )}
               <VerifyRow label="Barangay" value={result.barangay} />
               <VerifyRow label="Municipality" value={result.municipality} />
             </div>
-            <div className="mt-4 pt-3 border-t border-stone-100">
-              <p className="text-[10px] text-stone-400 text-center">
-                Verified by E-Barangay Digital Platform · {new Date().toLocaleString('fil-PH')}
+
+            <div className="mt-4 pt-3 border-t border-stone-200">
+              <p className="text-[9px] text-stone-400 text-center font-mono break-all line-clamp-1">
+                HASH: {result.doc_hash}
+              </p>
+              <p className="text-[10px] text-stone-400 text-center mt-2">
+                Verified by E-Barangay Security Engine · {new Date().toLocaleString('fil-PH')}
               </p>
             </div>
           </div>

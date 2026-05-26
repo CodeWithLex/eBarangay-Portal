@@ -4,27 +4,55 @@ import { ArrowLeft, Upload, CheckCircle, FileText, ChevronDown, AlertCircle } fr
 import { supabase, requests, DOCUMENT_TYPES } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { BottomNav } from '../lib/BottomNav'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+
+const requestSchema = z.object({
+  document_type: z.string().min(1, "Mamili ng uri ng dokumento"),
+  purpose: z.string().min(10, "Dapat ay hindi bababa sa 10 characters ang layunin"),
+  age: z.string().min(1, "Ilagay ang edad"),
+  occupation: z.string().min(1, "Ilagay ang trabaho"),
+})
 
 export default function RequestPage({ navigate }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const fileRef = useRef()
 
-  const [form, setForm] = useState({ 
-    document_type: '', 
-    purpose: '',
-    age: user?.birth_date ? new Date().getFullYear() - new Date(user.birth_date).getFullYear() : '',
-    occupation: user?.occupation || ''
-  })
   const [file, setFile] = useState(null)
   const [consent, setConsent] = useState(false)
   const [errors, setErrors] = useState({})
   const [success, setSuccess] = useState(null)
 
+  const { register, handleSubmit, watch, setValue, formState: { errors: formErrors } } = useForm({
+    resolver: zodResolver(requestSchema),
+    defaultValues: { 
+      document_type: '', 
+      purpose: '', 
+      age: user?.birth_date ? (new Date().getFullYear() - new Date(user.birth_date).getFullYear()).toString() : '',
+      occupation: user?.occupation || ''
+    }
+  })
+  const watchDocType = watch('document_type')
+  const watchPurpose = watch('purpose')
+
   const mutation = useMutation({
-    mutationFn: async ({ form, file }) => {
-      if (!user?.id) {
-        return { data: null, error: { message: 'Hindi ka naka-login. Mag-login muli.' } }
+    mutationFn: async ({ data, file }) => {
+      if (!user?.id) throw new Error('Hindi ka naka-login.')
+
+      // Check for active (unexpired) documents of the same type
+      const { data: existing } = await supabase
+        .from('requests')
+        .select('*')
+        .eq('resident_id', user.id)
+        .eq('document_type', data.document_type)
+        .eq('status', 'approved')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (existing) {
+        throw new Error(`Mayroon ka pang aktibong ${data.document_type} hanggang ${new Date(existing.expires_at).toLocaleDateString()}. Maaari mong i-download ang dati mong kopya sa Track page.`)
       }
 
       let file_url = null
@@ -35,23 +63,18 @@ export default function RequestPage({ navigate }) {
           .from('valid-ids')
           .upload(fileName, file, { upsert: false })
 
-        if (uploadError) {
-          const msg = uploadError.message?.includes('Bucket not found')
-            ? 'Hindi pa naka-setup ang storage. Run 003_storage_valid_ids.sql sa Supabase SQL Editor.'
-            : uploadError.message
-          return { data: null, error: { message: msg } }
-        }
+        if (uploadError) throw uploadError
         file_url = fileName
       }
 
       return requests.submit({
-        document_type: form.document_type,
-        purpose: form.purpose,
+        document_type: data.document_type,
+        purpose: data.purpose,
         resident_id: user.id,
         file_url,
         metadata: {
-          age: form.age,
-          occupation: form.occupation
+          age: data.age,
+          occupation: data.occupation
         }
       })
     },
@@ -67,18 +90,6 @@ export default function RequestPage({ navigate }) {
       setErrors({ submit: err?.message || 'Hindi naisumite ang hiling. Subukan muli.' })
     },
   })
-
-  function validate() {
-    const errs = {}
-    if (!form.document_type)  errs.document_type = 'Pumili ng uri ng dokumento.'
-    if (!form.purpose.trim()) errs.purpose = 'Ilagay ang layunin ng hiling.'
-    if (!form.age)            errs.age = 'Ilagay ang iyong edad.'
-    if (!form.occupation)     errs.occupation = 'Ilagay ang iyong trabaho.'
-    if (!file)                errs.file = 'Kinakailangan ang valid ID.'
-    if (!consent)             errs.consent = 'Kinakailangan ang pahintulot.'
-    setErrors(errs)
-    return Object.keys(errs).length === 0
-  }
 
   function handleFileChange(e) {
     const f = e.target.files?.[0]
@@ -98,11 +109,17 @@ export default function RequestPage({ navigate }) {
     setErrors(prev => ({ ...prev, file: undefined }))
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!validate()) return
+  async function onFormSubmit(data) {
+    if (!file) {
+      setErrors(prev => ({ ...prev, file: 'Kinakailangan ang valid ID.' }))
+      return
+    }
+    if (!consent) {
+      setErrors(prev => ({ ...prev, consent: 'Kinakailangan ang pahintulot.' }))
+      return
+    }
     setErrors({})
-    mutation.mutate({ form, file })
+    mutation.mutate({ data, file })
   }
 
   // ── Success state ──────────────────────────────────
@@ -159,59 +176,62 @@ export default function RequestPage({ navigate }) {
         </div>
       </header>
 
-      <form onSubmit={handleSubmit} className="flex-1 flex flex-col">
+      <form onSubmit={handleSubmit(onFormSubmit)} className="flex-1 flex flex-col">
         <div className="flex-1 px-4 py-5 space-y-5">
 
           {/* Document type selector */}
           <div>
             <p className="section-label">Uri ng Dokumento</p>
             <div className="space-y-2">
-              {DOCUMENT_TYPES.map(dt => (
-                <label
-                  key={dt.value}
-                  className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                    form.document_type === dt.value
-                      ? 'border-brand-400 bg-brand-50'
-                      : 'border-stone-200 bg-white hover:border-stone-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="doc_type"
-                    value={dt.value}
-                    checked={form.document_type === dt.value}
-                    onChange={() => setForm(f => ({ ...f, document_type: dt.value }))}
-                    className="sr-only"
-                  />
-                  <span className="text-xl" aria-hidden>{dt.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold ${form.document_type === dt.value ? 'text-brand-800' : 'text-stone-800'}`}>
-                      {dt.label}
-                    </p>
-                    <p className="text-xs text-stone-400">{dt.days} araw na trabaho</p>
-                  </div>
-                  {form.document_type === dt.value && (
-                    <CheckCircle className="w-5 h-5 text-brand-500 flex-shrink-0" />
-                  )}
-                </label>
-              ))}
+              {DOCUMENT_TYPES.map(dt => {
+                const isActive = watchDocType === dt.value
+                return (
+                  <label
+                    key={dt.value}
+                    className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                      isActive
+                        ? 'border-brand-400 bg-brand-50 ring-2 ring-brand-500/10'
+                        : 'border-stone-200 bg-white hover:border-stone-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      {...register('document_type')}
+                      value={dt.value}
+                      className="sr-only"
+                    />
+                    <span className="text-xl" aria-hidden>{dt.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold ${isActive ? 'text-brand-800' : 'text-stone-800'}`}>
+                        {dt.label}
+                      </p>
+                      <p className="text-xs text-stone-400">{dt.days} araw na trabaho</p>
+                    </div>
+                    {isActive && (
+                      <CheckCircle className="w-5 h-5 text-brand-500 flex-shrink-0" />
+                    )}
+                  </label>
+                )
+              })}
             </div>
-            {errors.document_type && <FieldError msg={errors.document_type} />}
+            {formErrors.document_type && <FieldError msg={formErrors.document_type.message} />}
           </div>
 
           {/* Purpose */}
           <div>
             <p className="section-label">Layunin / Purpose</p>
             <textarea
-              className={`field h-24 resize-none ${errors.purpose ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
+              {...register('purpose')}
+              className={`field h-24 resize-none transition-all duration-300 ${
+                formErrors.purpose ? 'border-red-400 ring-2 ring-red-500/10' : 
+                watchPurpose?.length >= 10 ? 'border-green-400 ring-2 ring-green-500/10' : ''
+              }`}
               placeholder="Hal. Para sa bagong trabaho, scholarship, PhilHealth application..."
-              value={form.purpose}
-              onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}
               maxLength={300}
             />
             <div className="flex justify-between items-center mt-1">
-              {errors.purpose ? <FieldError msg={errors.purpose} /> : <span />}
-              <span className="text-xs text-stone-300">{form.purpose.length}/300</span>
+              {formErrors.purpose ? <FieldError msg={formErrors.purpose.message} /> : <span />}
+              <span className="text-xs text-stone-300">{watchPurpose?.length || 0}/300</span>
             </div>
           </div>
 
@@ -220,23 +240,21 @@ export default function RequestPage({ navigate }) {
               <p className="section-label">Edad (Age)</p>
               <input 
                 type="number"
-                className={`field ${errors.age ? 'border-red-300' : ''}`}
+                {...register('age')}
+                className={`field ${formErrors.age ? 'border-red-400' : ''}`}
                 placeholder="Hal. 25"
-                value={form.age}
-                onChange={e => setForm(f => ({ ...f, age: e.target.value }))}
               />
-              {errors.age && <FieldError msg={errors.age} />}
+              {formErrors.age && <FieldError msg={formErrors.age.message} />}
             </div>
             <div>
               <p className="section-label">Trabaho</p>
               <input 
                 type="text"
-                className={`field ${errors.occupation ? 'border-red-300' : ''}`}
+                {...register('occupation')}
+                className={`field ${formErrors.occupation ? 'border-red-400' : ''}`}
                 placeholder="Hal. Magsasaka"
-                value={form.occupation}
-                onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))}
               />
-              {errors.occupation && <FieldError msg={errors.occupation} />}
+              {formErrors.occupation && <FieldError msg={formErrors.occupation.message} />}
             </div>
           </div>
 

@@ -19,6 +19,27 @@ import { supabase, requests } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { formatDate, formatTime } from '../lib/utils'
 
+async function generateDocHash(req) {
+  const data = `${req.reference_no}|${req.resident_id}|${req.document_type}|${req.created_at}`
+  const encoder = new TextEncoder()
+  const d = encoder.encode(data)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', d)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function getExpiryDate(docType) {
+  const date = new Date()
+  if (docType.includes('Clearance')) {
+    date.setMonth(date.getMonth() + 6)
+  } else if (docType.includes('Indigency')) {
+    date.setMonth(date.getMonth() + 3)
+  } else {
+    date.setMonth(date.getMonth() + 6)
+  }
+  return date.toISOString()
+}
+
 export default function StaffDashboard() {
   const { user, signOut } = useAuth()
   const queryClient = useQueryClient()
@@ -57,8 +78,15 @@ export default function StaffDashboard() {
 
   // Update status mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ id, status, remarks }) => {
-      const { data, error } = await requests.updateStatus(id, { status, remarks, reviewed_by: user.id })
+    mutationFn: async ({ id, status, remarks, releasing_date, doc_hash, expires_at }) => {
+      const { data, error } = await requests.updateStatus(id, { 
+        status, 
+        remarks, 
+        reviewed_by: user.id,
+        releasing_date,
+        doc_hash,
+        expires_at
+      })
       if (error) throw error
       return data
     },
@@ -268,18 +296,33 @@ function ReviewModal({ req, onClose, onUpdate, isPending }) {
   const [releasingDate, setReleasingDate] = useState(req.releasing_date ? req.releasing_date.split('T')[0] : '')
   const [releasingTime, setReleasingTime] = useState(req.releasing_date ? new Date(req.releasing_date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '09:00')
   
-  const handleAction = (status) => {
+  const handleAction = async (status) => {
     if (status === 'rejected' && !remarks.trim()) {
       alert('Paki-input ang dahilan ng pag-reject.')
       return
     }
 
     let finalReleasingDate = null
-    if (status === 'approved' && releasingDate) {
-      finalReleasingDate = `${releasingDate}T${releasingTime}:00Z`
+    let doc_hash = null
+    let expires_at = null
+
+    if (status === 'approved') {
+      if (releasingDate) {
+        finalReleasingDate = `${releasingDate}T${releasingTime}:00Z`
+      }
+      // Generate security hash for tamper-proofing
+      doc_hash = await generateDocHash(req)
+      // Set validity period
+      expires_at = getExpiryDate(req.document_type)
     }
 
-    onUpdate({ status, remarks, releasing_date: finalReleasingDate })
+    onUpdate({ 
+      status, 
+      remarks, 
+      releasing_date: finalReleasingDate,
+      doc_hash,
+      expires_at
+    })
   }
 
   return (

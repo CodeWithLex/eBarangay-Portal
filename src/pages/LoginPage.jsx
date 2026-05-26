@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Shield, Phone, Lock, CheckCircle, ChevronRight, ArrowLeft } from 'lucide-react'
 import { auth } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 
 const STEP_MOBILE   = 'mobile'
 const STEP_OTP      = 'otp'
@@ -10,17 +11,31 @@ const STEP_CONSENT  = 'consent'
 
 const PUROKS = ['Purok 1','Purok 2','Purok 3','Purok 4','Purok 5','Purok 6','Purok 7','Purok 8']
 
+const registrationSchema = z.object({
+  full_name: z.string().min(3, "Masyadong maikli ang pangalan."),
+  purok: z.string().min(1, "Pumili ng Purok."),
+  date_of_birth: z.string().min(1, "Ilagay ang iyong kaarawan."),
+  voter_status: z.boolean().default(false),
+})
+
 export default function LoginPage() {
   const { refreshProfile } = useAuth()
   const [step, setStep]       = useState(STEP_MOBILE)
   const [mobile, setMobile]   = useState('')
   const [otp, setOtp]         = useState(['','','','','',''])
-  const [form, setForm]       = useState({ full_name: '', purok: '', barangay: 'Barangay Mabuhay' })
-  const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
   const [displayOtp, setDisplayOtp] = useState(null)
   const [verifiedData, setVerifiedData] = useState(null) // { userId, phone, isNewUser }
+
+  // React Hook Form for Registration
+  const { register, handleSubmit, watch, formState: { errors: formErrors } } = useForm({
+    resolver: zodResolver(registrationSchema),
+    defaultValues: { full_name: '', purok: '', date_of_birth: '', voter_status: false }
+  })
+
+  // Watch for visual feedback
+  const watchAll = watch()
 
   // ── Step 1: Send OTP ───────────────────────────────
   async function handleSendOTP(e) {
@@ -83,10 +98,9 @@ export default function LoginPage() {
   }
 
   // ── Step 3: Registration form ──────────────────────
-  function handleRegisterNext(e) {
-    e.preventDefault()
-    if (!form.full_name.trim()) { setError('Ilagay ang iyong buong pangalan.'); return }
-    if (!form.purok) { setError('Pumili ng Purok.'); return }
+  const [tempRegData, setTempRegData] = useState(null)
+  function handleRegisterNext(data) {
+    setTempRegData(data)
     setError('')
     setStep(STEP_CONSENT)
   }
@@ -100,10 +114,13 @@ export default function LoginPage() {
     const userId   = verifiedData?.userId
     const { error: saveErr } = await auth.saveProfile({
       userId,
-      fullName: form.full_name,
+      fullName: tempRegData.full_name,
       mobile: `+63${mobile.slice(1)}`,
-      purok: form.purok,
-      barangay: form.barangay,
+      purok: tempRegData.purok,
+      birth_date: tempRegData.date_of_birth,
+      voter_status: tempRegData.voter_status,
+      is_verified: false, // Residents claiming to be voters must be verified by staff
+      barangay: 'Barangay Mabuhay',
     })
 
     setLoading(false)
@@ -234,37 +251,62 @@ export default function LoginPage() {
 
           {/* ── STEP: Register ── */}
           {step === STEP_REGISTER && (
-            <form onSubmit={handleRegisterNext} className="space-y-4 animate-fade-up">
+            <form onSubmit={handleSubmit(handleRegisterNext)} className="space-y-4 animate-fade-up">
               <div>
                 <h2 className="text-lg font-bold text-stone-900 mb-1">Ikumpleto ang iyong profile</h2>
                 <p className="text-sm text-stone-500">Unang pagkakataon mong mag-login.</p>
               </div>
+              
               <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Buong pangalan *</label>
+                <label className="block text-xs font-semibold text-stone-500 mb-1 uppercase tracking-tight">Buong pangalan *</label>
                 <input
-                  className="field"
+                  {...register('full_name')}
+                  className={`field transition-all duration-300 ${
+                    formErrors.full_name ? 'border-red-400 focus:ring-red-100 ring-2 ring-red-500/10' : 
+                    watchAll.full_name?.length >= 3 ? 'border-green-400 focus:ring-green-100 ring-2 ring-green-500/10' : ''
+                  }`}
                   placeholder="Hal. Juan dela Cruz"
-                  value={form.full_name}
-                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                  required
                 />
+                {formErrors.full_name && <p className="text-[10px] text-red-500 mt-1">{formErrors.full_name.message}</p>}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Purok *</label>
-                <select
-                  className="field"
-                  value={form.purok}
-                  onChange={e => setForm(f => ({ ...f, purok: e.target.value }))}
-                  required
-                >
-                  <option value="">-- Pumili ng Purok --</option>
-                  {PUROKS.map(p => <option key={p}>{p}</option>)}
-                </select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1 uppercase tracking-tight">Purok *</label>
+                  <select
+                    {...register('purok')}
+                    className={`field ${formErrors.purok ? 'border-red-400' : ''}`}
+                  >
+                    <option value="">-- Pumili --</option>
+                    {PUROKS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  {formErrors.purok && <p className="text-[10px] text-red-500 mt-1">{formErrors.purok.message}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-500 mb-1 uppercase tracking-tight">Birth Date *</label>
+                  <input
+                    type="date"
+                    {...register('date_of_birth')}
+                    className={`field ${formErrors.date_of_birth ? 'border-red-400' : ''}`}
+                  />
+                  {formErrors.date_of_birth && <p className="text-[10px] text-red-500 mt-1">{formErrors.date_of_birth.message}</p>}
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Barangay</label>
-                <input className="field bg-stone-100 cursor-not-allowed" value={form.barangay} readOnly />
+
+              <div className={`p-4 rounded-2xl border transition-all ${watchAll.voter_status ? 'bg-brand-50 border-brand-200' : 'bg-stone-50 border-stone-100'}`}>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    {...register('voter_status')}
+                    className="w-5 h-5 rounded accent-brand-500"
+                  />
+                  <div>
+                    <p className="text-xs font-bold text-stone-800">Rehistradong Voter?</p>
+                    <p className="text-[10px] text-stone-400">Markahan kung ikaw ay residente at voter ng barangay.</p>
+                  </div>
+                </label>
               </div>
+
               {error && <ErrorMsg msg={error} />}
               <button type="submit" className="btn-primary">
                 Susunod <ChevronRight className="w-4 h-4" />
