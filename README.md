@@ -26,6 +26,8 @@ Run `supabase/migrations/001_initial_schema.sql` in your **Supabase → SQL Edit
 
 If you see **`consented_at` column not found**, also run `002_add_consented_at.sql`.
 
+If you see **`file_url` column not found**, run `004_add_file_url.sql`.
+
 ### 3. Supabase Storage (required for document requests)
 
 Run `supabase/migrations/003_storage_valid_ids.sql` in **Supabase → SQL Editor**.

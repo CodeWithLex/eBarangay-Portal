@@ -61,6 +61,8 @@ create table if not exists requests (
   updated_at    timestamptz default now()
 );
 
+alter table requests add column if not exists file_url text;
+
 alter table requests enable row level security;
 
 create policy "requests: resident sees own"
