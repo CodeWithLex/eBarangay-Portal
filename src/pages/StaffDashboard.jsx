@@ -26,21 +26,21 @@ export default function StaffDashboard() {
   const [search, setSearch] = useState('')
   const [selectedRequest, setSelectedRequest] = useState(null)
 
-  // Fetch all requests
+  // Fetch all requests via Edge Function (bypasses RLS for staff)
   const { data: allRequests = [], isLoading, error: queryError } = useQuery({
     queryKey: ['admin-requests'],
     queryFn: async () => {
       if (!supabase) return []
-      const { data, error } = await supabase
-        .from('requests')
-        .select('*, profiles(full_name, mobile, purok)')
-        .order('created_at', { ascending: false })
+      const { data, error } = await supabase.functions.invoke('get-staff-requests')
       if (error) {
-        console.error('[StaffDashboard] query error:', error)
+        console.error('[StaffDashboard] edge function error:', error)
         throw error
       }
-      console.log('[StaffDashboard] fetched', data?.length, 'requests')
-      return data ?? []
+      if (data?.error) {
+        throw new Error(data.error)
+      }
+      console.log('[StaffDashboard] fetched', data?.count, 'requests')
+      return data?.data ?? []
     }
   })
 
