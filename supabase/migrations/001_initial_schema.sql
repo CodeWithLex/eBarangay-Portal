@@ -28,6 +28,9 @@ create table if not exists profiles (
   created_at    timestamptz default now()
 );
 
+-- If profiles already existed without consented_at, add it
+alter table profiles add column if not exists consented_at timestamptz;
+
 alter table profiles enable row level security;
 
 create policy "profiles: own row"

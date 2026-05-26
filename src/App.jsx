@@ -10,6 +10,7 @@ import VerifyPage from './pages/VerifyPage'
 export default function App() {
   const { user, loading } = useAuth()
   const [page, setPage] = useState('home')
+  const needsProfile = Boolean(user && (!user.full_name || !user.purok || !user.barangay))
 
   if (loading) {
     return (
@@ -24,7 +25,7 @@ export default function App() {
     )
   }
 
-  if (!user) return <LoginPage />
+  if (!user || needsProfile) return <LoginPage />
 
   const navigate = (p) => setPage(p)
 

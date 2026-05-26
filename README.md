@@ -24,6 +24,8 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 Run `supabase/migrations/001_initial_schema.sql` in your **Supabase → SQL Editor**.
 
+If you see **`consented_at` column not found**, also run `002_add_consented_at.sql`.
+
 ### 3. Supabase Storage
 
 Create a private bucket named `valid-ids` in **Storage** and apply the RLS policies at the bottom of the migration file.
