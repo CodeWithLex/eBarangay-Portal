@@ -57,11 +57,18 @@ export default function StaffDashboard() {
 
   // Update status mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, status, remarks }) => 
-      requests.updateStatus(id, { status, remarks, reviewed_by: user.id }),
+    mutationFn: async ({ id, status, remarks }) => {
+      const { data, error } = await requests.updateStatus(id, { status, remarks, reviewed_by: user.id })
+      if (error) throw error
+      return data
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-requests'] })
       setSelectedRequest(null)
+    },
+    onError: (err) => {
+      console.error('[StaffDashboard] update error:', err)
+      alert('Error updating request: ' + (err.message || 'Unknown error'))
     }
   })
 
