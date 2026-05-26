@@ -16,95 +16,72 @@ function json(body: unknown, status = 200) {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  console.log('[get-staff-requests] Invoked')
-
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !serviceKey) {
-      console.error('[get-staff-requests] Missing environment variables')
-      return json({ error: 'Server configuration error: missing secrets' }, 500)
+      return json({ error: 'CONFIG_ERROR: Missing Supabase secrets' }, 500)
     }
 
-    // 1. Verify caller is authenticated
-    const authHeader = req.headers.get('authorization') ?? ''
-    const userClient = createClient(supabaseUrl, anonKey!, {
-      global: { headers: { authorization: authHeader } }
-    })
-
-    const { data: { user }, error: authErr } = await userClient.auth.getUser()
-    if (authErr || !user) {
-      console.warn('[get-staff-requests] Unauthorized access attempt', authErr)
-      return json({ error: 'Unauthorized: No valid session' }, 401)
-    }
-
-    console.log('[get-staff-requests] Caller UID:', user.id)
-
-    // 2. Use service role client
     const adminClient = createClient(supabaseUrl, serviceKey)
 
-    // 3. Check caller's role from profiles
-    const { data: callerProfile, error: profileErr } = await adminClient
+    // 1. Authenticate caller
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader) return json({ error: 'AUTH_ERROR: Missing Authorization header' }, 401)
+
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authErr } = await adminClient.auth.getUser(token)
+    if (authErr || !user) return json({ error: 'AUTH_ERROR: Invalid session' }, 401)
+
+    // 2. Check role
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (profileErr) {
-      console.error('[get-staff-requests] Profile lookup error:', profileErr)
-      return json({ error: `Forbidden: Profile lookup failed: ${profileErr.message}` }, 403)
+    if (!profile || !['staff', 'admin'].includes(profile.role)) {
+      return json({ error: `PERMISSION_ERROR: Role '${profile?.role}' not authorized` }, 403)
     }
 
-    if (!callerProfile || !['staff', 'admin'].includes(callerProfile.role)) {
-      console.warn(`[get-staff-requests] Forbidden role: ${callerProfile?.role} for ${user.id}`)
-      return json({ error: `Forbidden: role '${callerProfile?.role}' not authorized` }, 403)
-    }
-
-    console.log('[get-staff-requests] Role verified:', callerProfile.role)
-
-    // 4. Fetch all requests
-    const { data: reqs, error: reqErr } = await adminClient
+    // 3. Get requests
+    const { data: reqs, error: rErr } = await adminClient
       .from('requests')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (reqErr) {
-      console.error('[get-staff-requests] Requests fetch error:', reqErr)
-      throw reqErr
-    }
+    if (rErr) throw rErr
 
-    console.log(`[get-staff-requests] Found ${reqs?.length || 0} requests`)
-
-    // 5. Fetch profiles for these requests
+    // 4. Enrich with signed URLs and profiles
     const resIds = [...new Set(reqs?.map((r: any) => r.resident_id) ?? [])]
-    let enriched = reqs || []
+    const { data: profiles } = await adminClient
+      .from('profiles')
+      .select('id, full_name, mobile, purok, barangay')
+      .in('id', resIds)
 
-    if (resIds.length > 0) {
-      const { data: profiles, error: pErr } = await adminClient
-        .from('profiles')
-        .select('id, full_name, mobile, purok, barangay')
-        .in('id', resIds)
+    const profileMap = (profiles || []).reduce((acc: any, p: any) => { acc[p.id] = p; return acc }, {})
 
-      if (pErr) console.error('[get-staff-requests] Profiles fetch error (non-fatal):', pErr)
-
-      const profileMap = (profiles || []).reduce((acc: any, p: any) => {
-        acc[p.id] = p
-        return acc
-      }, {})
-
-      enriched = (reqs || []).map((r: any) => ({
+    // Process each request to add signed URL if file exists
+    const enriched = await Promise.all((reqs || []).map(async (r: any) => {
+      let signedUrl = null
+      if (r.file_url) {
+        const { data: sData } = await adminClient.storage
+          .from('valid-ids')
+          .createSignedUrl(r.file_url, 3600) // 1 hour expiry
+        signedUrl = sData?.signedUrl
+      }
+      return {
         ...r,
-        profiles: profileMap[r.resident_id] || null
-      }))
-    }
+        profiles: profileMap[r.resident_id] || null,
+        signed_id_url: signedUrl
+      }
+    }))
 
     return json({ data: enriched, count: enriched.length })
 
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Unknown internal error'
-    console.error('[get-staff-requests] Fatal error:', msg)
+    const msg = err instanceof Error ? err.message : 'Internal Server Error'
     return json({ error: msg }, 500)
   }
 })

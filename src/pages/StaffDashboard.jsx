@@ -31,24 +31,27 @@ export default function StaffDashboard() {
     queryKey: ['admin-requests'],
     queryFn: async () => {
       if (!supabase) return []
-      const { data, error } = await supabase.functions.invoke('get-staff-requests')
       
-      // If we got a network/status error
-      if (error) {
-        console.error('[StaffDashboard] invoke error:', error)
-        // Try to get message from data if it exists
-        const msg = data?.error || error.message || 'Edge Function error'
-        throw new Error(msg)
+      try {
+        const { data, error } = await supabase.functions.invoke('get-staff-requests')
+        
+        if (error) {
+          // Supabase invoke errors often hide the body. Let's try to parse it if possible
+          console.error('[StaffDashboard] Edge Invoke Error:', error)
+          throw new Error(data?.error || error.message || 'Access Denied')
+        }
+        
+        if (data?.error) {
+          console.error('[StaffDashboard] Edge Logic Error:', data.error)
+          throw new Error(data.error)
+        }
+        
+        console.log('[StaffDashboard] Success:', data?.count, 'requests')
+        return data?.data ?? []
+      } catch (err) {
+        console.error('[StaffDashboard] Catching Error:', err)
+        throw err
       }
-      
-      // If the function returned an error in the body
-      if (data?.error) {
-        console.error('[StaffDashboard] function body error:', data.error)
-        throw new Error(data.error)
-      }
-      
-      console.log('[StaffDashboard] fetched', data?.count, 'requests')
-      return data?.data ?? []
     }
   })
 
@@ -310,7 +313,7 @@ function ReviewModal({ req, onClose, onUpdate, isPending }) {
                   <p className="text-sm font-semibold text-stone-600 mb-1">Uploaded ID File</p>
                   <p className="text-xs text-stone-400 mb-4">{req.file_url}</p>
                   <a 
-                    href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/authenticated/valid-ids/${req.file_url}`} 
+                    href={req.signed_id_url} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="btn-primary py-2 px-4 inline-flex items-center gap-2 text-xs"
