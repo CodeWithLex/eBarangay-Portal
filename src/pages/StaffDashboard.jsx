@@ -32,13 +32,21 @@ export default function StaffDashboard() {
     queryFn: async () => {
       if (!supabase) return []
       const { data, error } = await supabase.functions.invoke('get-staff-requests')
+      
+      // If we got a network/status error
       if (error) {
-        console.error('[StaffDashboard] edge function error:', error)
-        throw error
+        console.error('[StaffDashboard] invoke error:', error)
+        // Try to get message from data if it exists
+        const msg = data?.error || error.message || 'Edge Function error'
+        throw new Error(msg)
       }
+      
+      // If the function returned an error in the body
       if (data?.error) {
+        console.error('[StaffDashboard] function body error:', data.error)
         throw new Error(data.error)
       }
+      
       console.log('[StaffDashboard] fetched', data?.count, 'requests')
       return data?.data ?? []
     }
