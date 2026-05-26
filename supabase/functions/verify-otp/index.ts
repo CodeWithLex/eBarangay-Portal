@@ -121,12 +121,32 @@ serve(async (req) => {
       .eq('id', userId)
       .maybeSingle()
 
+    // Issue a real Supabase session so RLS (auth.uid()) works in the browser
+    const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: authEmail,
+    })
+    if (linkErr) throw linkErr
+
+    const tokenHash = linkData.properties?.hashed_token
+    if (!tokenHash) {
+      throw new Error('Could not create login session.')
+    }
+
+    const { data: sessionData, error: sessionErr } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'email',
+    })
+    if (sessionErr) throw sessionErr
+
     return json({
       success: true,
       userId,
       phone,
       isNewUser,
       hasProfile: !!profile,
+      access_token: sessionData.session?.access_token,
+      refresh_token: sessionData.session?.refresh_token,
     })
   } catch (err) {
     console.error('[verify-otp] error:', err)

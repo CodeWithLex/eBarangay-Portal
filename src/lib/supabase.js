@@ -120,7 +120,23 @@ export const auth = {
       return { data: null, error: { message: 'Invalid mobile number.' } }
     }
 
-    return invokeEdgeFunction('verify-otp', { mobile, otp: String(otp) })
+    const { data, error } = await invokeEdgeFunction('verify-otp', {
+      mobile,
+      otp: String(otp),
+    })
+    if (error) return { data: null, error }
+
+    if (data?.access_token && data?.refresh_token) {
+      const { error: sessionErr } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      })
+      if (sessionErr) {
+        return { data: null, error: { message: sessionErr.message } }
+      }
+    }
+
+    return { data, error: null }
   },
 
   // Check if a profile already exists for the current auth user
@@ -155,7 +171,9 @@ export const auth = {
       .from('profiles')
       .upsert([profile])
 
-    if (profileErr) return { error: profileErr }
+    if (profileErr) {
+      return { error: { message: profileErr.message ?? 'Failed to save profile.' } }
+    }
 
     // Log consent (RA 10173)
     await supabase.from('consent_logs').insert([{

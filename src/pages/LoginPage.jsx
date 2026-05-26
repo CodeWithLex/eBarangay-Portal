@@ -11,7 +11,7 @@ const STEP_CONSENT  = 'consent'
 const PUROKS = ['Purok 1','Purok 2','Purok 3','Purok 4','Purok 5','Purok 6','Purok 7','Purok 8']
 
 export default function LoginPage() {
-  const { signIn, refreshProfile } = useAuth()
+  const { refreshProfile } = useAuth()
   const [step, setStep]       = useState(STEP_MOBILE)
   const [mobile, setMobile]   = useState('')
   const [otp, setOtp]         = useState(['','','','','',''])
@@ -62,9 +62,8 @@ export default function LoginPage() {
       // New user — collect registration info
       setStep(STEP_REGISTER)
     } else {
-      // Existing user — load profile and go to dashboard
+      // Existing user — session is set; AuthContext loads profile from DB
       await refreshProfile?.()
-      signIn({ id: data.userId, mobile, role: 'resident' })
     }
   }
 
@@ -111,16 +110,8 @@ export default function LoginPage() {
 
     if (saveErr) { setError(saveErr.message); return }
 
-    // Refresh auth context so profile fields populate
+    // Session already set after OTP — reload profile from DB
     await refreshProfile?.()
-    signIn({
-      id: userId,
-      full_name: form.full_name,
-      mobile,
-      purok: form.purok,
-      barangay: form.barangay,
-      role: 'resident',
-    })
   }
 
   return (
