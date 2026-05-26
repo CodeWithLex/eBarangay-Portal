@@ -123,11 +123,18 @@ function TrackCard({ req, delay, navigate }) {
         ))}
       </div>
 
-      {/* Rejection remarks */}
+      {/* Rejection remarks or Uploaded ID */}
       {req.status === 'rejected' && req.remarks && (
         <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 mb-3">
           <p className="text-xs font-semibold text-red-600 mb-0.5">Dahilan ng pagtanggi:</p>
           <p className="text-xs text-red-700">{req.remarks}</p>
+        </div>
+      )}
+
+      {req.file_url && (
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <FileText className="w-3.5 h-3.5 text-stone-400" />
+          <p className="text-[10px] text-stone-500 truncate">Uploaded ID: {req.file_url.split('/').pop()}</p>
         </div>
       )}
 

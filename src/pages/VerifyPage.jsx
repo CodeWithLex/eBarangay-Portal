@@ -9,7 +9,7 @@ import { BottomNav } from '../lib/BottomNav'
 // No mobile numbers, no full addresses, no sensitive data.
 
 export default function VerifyPage({ navigate }) {
-  const [hash, setHash] = useState('abc123xyz789') // pre-filled for demo
+  const [hash, setHash] = useState('') 
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [checked, setChecked] = useState(false)
@@ -59,11 +59,15 @@ export default function VerifyPage({ navigate }) {
         {/* QR Scanner placeholder */}
         <div className="bg-stone-900 rounded-2xl aspect-square flex flex-col items-center justify-center gap-3">
           <QrCode className="w-16 h-16 text-stone-600" />
-          <p className="text-stone-500 text-sm">QR Scanner</p>
+          <p className="text-stone-500 text-sm">QR Scanner Placeholder</p>
           <p className="text-stone-600 text-xs text-center px-8">
-            I-install ang html5-qrcode library para sa live scanning sa production.
+            Para sa production, i-install ang <code className="text-brand-400">html5-qrcode</code>.
           </p>
-          <button className="mt-1 text-xs text-brand-400 font-semibold border border-brand-700 px-4 py-2 rounded-xl">
+          <button 
+            type="button"
+            onClick={() => alert('Mangyaring ilagay ang code sa ibaba para sa demo.')}
+            className="mt-1 text-xs text-brand-400 font-semibold border border-brand-700 px-4 py-2 rounded-xl"
+          >
             I-activate ang Camera
           </button>
         </div>

@@ -87,6 +87,10 @@ begin
     'REF-' ||
     to_char(now(), 'YYYY') || '-' ||
     lpad((floor(random() * 89999) + 10000)::text, 5, '0');
+  
+  -- Generate unique qr_hash (short random string)
+  new.qr_hash := encode(gen_random_bytes(6), 'hex');
+  
   new.updated_at := now();
   return new;
 end;

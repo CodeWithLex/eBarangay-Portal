@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Upload, CheckCircle, FileText, ChevronDown, AlertCircle } from 'lucide-react'
-import { requests, DOCUMENT_TYPES } from '../lib/supabase'
+import { supabase, requests, DOCUMENT_TYPES } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { BottomNav } from '../lib/BottomNav'
 
@@ -17,7 +17,25 @@ export default function RequestPage({ navigate }) {
   const [success, setSuccess] = useState(null)
 
   const mutation = useMutation({
-    mutationFn: (data) => requests.submit(data),
+    mutationFn: async ({ form, file }) => {
+      let file_url = null
+      if (file && supabase) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('valid-ids')
+          .upload(fileName, file)
+
+        if (uploadError) throw uploadError
+        file_url = fileName
+      }
+
+      return requests.submit({
+        ...form,
+        resident_id: user.id,
+        file_url
+      })
+    },
     onSuccess: ({ data, error }) => {
       if (error) { setErrors({ submit: error.message }); return }
       queryClient.invalidateQueries({ queryKey: ['requests'] })
@@ -57,11 +75,7 @@ export default function RequestPage({ navigate }) {
     e.preventDefault()
     if (!validate()) return
     setErrors({})
-    mutation.mutate({
-      document_type: form.document_type,
-      purpose: form.purpose,
-      resident_id: user.id,
-    })
+    mutation.mutate({ form, file })
   }
 
   // ── Success state ──────────────────────────────────
