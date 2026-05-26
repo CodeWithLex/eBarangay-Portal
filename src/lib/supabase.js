@@ -61,27 +61,48 @@ const INITIAL_REQUESTS = [
 let _requests = [...INITIAL_REQUESTS]
 let _session = null
 
+/** Read { error } from Edge Function non-2xx responses */
+async function invokeEdgeFunction(name, body) {
+  const { data, error } = await supabase.functions.invoke(name, { body })
+
+  if (error) {
+    let message = error.message
+    try {
+      if (error.context && typeof error.context.json === 'function') {
+        const details = await error.context.json()
+        if (details?.error) message = details.error
+      }
+    } catch {
+      /* use default message */
+    }
+    return { data: null, error: { message } }
+  }
+
+  if (data?.error) {
+    return { data: null, error: { message: data.error } }
+  }
+
+  return { data, error: null }
+}
+
 // ── Auth helpers ────────────────────────────────────────
 export const auth = {
-  // Send OTP — uses Semaphore Edge Function in production, mock in dev
+  // Send OTP — free in-app code (no SMS); uses send-otp Edge Function + otp_store
   async sendOTP(mobile) {
     if (!supabase) {
       await delay(800)
-      console.log(`[Mock] OTP sent to ${mobile}`)
-      return { error: null }
+      const displayOtp = String(Math.floor(100000 + Math.random() * 900000))
+      console.log(`[Mock] OTP for ${mobile}: ${displayOtp}`)
+      return { error: null, displayOtp }
     }
 
-    const phone = toE164PH(mobile)
-    if (!phone) return { error: { message: 'Invalid mobile number (use 09XXXXXXXXX).' } }
+    if (!toE164PH(mobile)) {
+      return { error: { message: 'Invalid mobile number (use 09XXXXXXXXX).' } }
+    }
 
-    // Call Supabase Edge Function → Semaphore API
-    const { data, error } = await supabase.functions.invoke('send-otp', {
-      body: { mobile: phone },
-    })
-
+    const { data, error } = await invokeEdgeFunction('send-otp', { mobile })
     if (error) return { error }
-    if (data?.error) return { error: { message: data.error } }
-    return { error: null }
+    return { error: null, displayOtp: data?.display_otp ?? null }
   },
 
   // Verify OTP — Edge Function validates and creates/fetches auth user
@@ -95,18 +116,11 @@ export const auth = {
       return { data: null, error: { message: 'Invalid OTP' } }
     }
 
-    const phone = toE164PH(mobile)
-    if (!phone) return { data: null, error: { message: 'Invalid mobile number.' } }
+    if (!toE164PH(mobile)) {
+      return { data: null, error: { message: 'Invalid mobile number.' } }
+    }
 
-    const { data, error } = await supabase.functions.invoke('verify-otp', {
-      body: { mobile: phone, otp: String(otp) },
-    })
-
-    if (error) return { data: null, error }
-    if (data?.error) return { data: null, error: { message: data.error } }
-
-    // Return userId + isNewUser for the login page to determine next step
-    return { data, error: null }
+    return invokeEdgeFunction('verify-otp', { mobile, otp: String(otp) })
   },
 
   // Check if a profile already exists for the current auth user

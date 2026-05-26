@@ -6,16 +6,37 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Convert 09XXXXXXXXX → +639XXXXXXXXX
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 function toE164(mobile: string): string | null {
   const digits = mobile.replace(/\D/g, '')
   if (digits.startsWith('09') && digits.length === 11) return '+63' + digits.slice(1)
   if (digits.startsWith('639') && digits.length === 12) return '+' + digits
+  if (digits.startsWith('63') && digits.length === 11) return '+63' + digits.slice(2)
   return null
 }
 
 function generateOTP(): string {
   return String(Math.floor(100000 + Math.random() * 900000))
+}
+
+function getServiceRoleKey(): string | undefined {
+  return (
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+    (() => {
+      try {
+        const keys = Deno.env.get('SUPABASE_SECRET_KEYS')
+        return keys ? JSON.parse(keys).default : undefined
+      } catch {
+        return undefined
+      }
+    })()
+  )
 }
 
 serve(async (req) => {
@@ -24,60 +45,50 @@ serve(async (req) => {
   try {
     const { mobile } = await req.json()
 
-    const phone = toE164(mobile)
+    if (!mobile) {
+      return json({ error: 'Mobile number is required.' }, 400)
+    }
+
+    const phone = toE164(String(mobile))
     if (!phone) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid mobile number. Use format 09XXXXXXXXX.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ error: 'Invalid mobile number. Use format 09XXXXXXXXX.' }, 400)
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = getServiceRoleKey()
+    if (!supabaseUrl || !serviceRoleKey) {
+      return json({ error: 'Server configuration error.' }, 500)
     }
 
     const otp = generateOTP()
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 minutes
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
 
-    // Store OTP in database (service_role bypasses RLS)
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     const { error: dbError } = await supabase
       .from('otp_store')
       .upsert({ mobile: phone, code: otp, expires_at: expiresAt, attempts: 0 })
 
-    if (dbError) throw dbError
-
-    // Send via Semaphore API
-    const semaphoreApiKey = Deno.env.get('SEMAPHORE_API_KEY')
-    const senderName = Deno.env.get('SEMAPHORE_SENDER_NAME') || 'eBarangay'
-
-    const formData = new FormData()
-    formData.append('apikey', semaphoreApiKey!)
-    formData.append('number', phone)
-    formData.append('message', `Ang iyong E-Barangay OTP ay: ${otp}. Mag-expire ito sa 5 minuto. Huwag ibahagi sa iba.`)
-    formData.append('sendername', senderName)
-
-    const smsRes = await fetch('https://api.semaphore.co/api/v4/messages', {
-      method: 'POST',
-      body: formData,
-    })
-
-    const smsData = await smsRes.json()
-    if (!smsRes.ok) {
-      console.error('Semaphore error:', smsData)
-      throw new Error('Failed to send SMS. Check Semaphore API key.')
+    if (dbError) {
+      console.error('[send-otp] Database error:', dbError)
+      const hint =
+        dbError.code === '42P01'
+          ? 'Run supabase/migrations/001_initial_schema.sql in Supabase SQL Editor.'
+          : dbError.message
+      return json({ error: `Database error: ${hint}` }, 500)
     }
 
-    console.log(`[OTP] Sent to ${phone} via Semaphore`)
+    // Free OTP: no SMS — show code on the next screen (pilot / demo mode)
+    console.log(`[send-otp] In-app OTP for ${phone}: ${otp}`)
 
-    return new Response(
-      JSON.stringify({ success: true, message: 'OTP sent.' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return json({
+      success: true,
+      message: 'OTP generated. Ilagay ang code sa susunod na screen.',
+      display_otp: otp,
+      expires_in_seconds: 300,
+    })
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    console.error('[send-otp] Unexpected error:', err)
+    return json({ error: err?.message ?? 'Failed to send OTP.' }, 500)
   }
 })

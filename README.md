@@ -6,7 +6,7 @@ A digital document-request system for barangay residents in the Philippines.
 
 - **Frontend**: React + Vite + TailwindCSS
 - **Backend**: Supabase (Auth, Database, Edge Functions, Storage)
-- **SMS**: Semaphore API (via Supabase Edge Functions)
+- **OTP**: Free in-app codes (mobile number login, no SMS cost)
 - **Deployment**: Vercel
 
 ## Setup
@@ -28,25 +28,22 @@ Run `supabase/migrations/001_initial_schema.sql` in your **Supabase → SQL Edit
 
 Create a private bucket named `valid-ids` in **Storage** and apply the RLS policies at the bottom of the migration file.
 
-### 4. Edge Functions (Semaphore SMS)
+### 4. Edge Functions (free OTP)
 
-Deploy the Edge Functions and set their secrets in **Supabase → Edge Functions → Secrets**:
-
-```
-SEMAPHORE_API_KEY=your_key_from_semaphore.co
-SEMAPHORE_SENDER_NAME=eBarangay
-```
-
-Deploy functions:
+Deploy the Edge Functions (no SMS API keys required):
 
 ```bash
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy send-otp
 npx supabase functions deploy verify-otp
 ```
 
+**How OTP works:** User enters `09XXXXXXXXX` → server generates a 6-digit code → code is shown on the next screen (and stored in `otp_store` for 5 minutes). No Semaphore/Twilio needed.
+
 ### 5. Vercel Deployment
 
-Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Project → Settings → Environment Variables**.
+Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Project → Settings → Environment Variables**, then redeploy.
 
 ## Local Development
 
@@ -55,13 +52,19 @@ npm install
 npm run dev
 ```
 
-The app automatically falls back to **Mock Mode** when Supabase env vars are missing.
+Without Supabase env vars, the app uses **Mock Mode** (random OTP shown in the UI).
 
 ## Key Features
 
-- 📱 Mobile OTP login via Semaphore SMS
+- 📱 Mobile number login with free in-app OTP
 - 📋 Request Barangay Clearance, Indigency, Residency, Business Clearance
 - 📊 Track request status with timeline
 - 🔍 QR code document verification (public)
 - 🔒 Row-Level Security — residents can only see their own data
 - 🧾 RA 10173 (Data Privacy Act) consent logging
+
+## OTP troubleshooting
+
+1. Run `001_initial_schema.sql` (creates `otp_store` table).
+2. Deploy `send-otp` and `verify-otp`.
+3. Enter a valid `09XXXXXXXXX` number — the OTP appears on the verify step.

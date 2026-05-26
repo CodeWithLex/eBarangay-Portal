@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const [displayOtp, setDisplayOtp] = useState(null)
   const [verifiedData, setVerifiedData] = useState(null) // { userId, phone, isNewUser }
 
   // ── Step 1: Send OTP ───────────────────────────────
@@ -32,10 +33,13 @@ export default function LoginPage() {
     }
 
     setLoading(true)
-    const { error: err } = await auth.sendOTP(mobile)
+    setDisplayOtp(null)
+    const { error: err, displayOtp: code } = await auth.sendOTP(mobile)
     setLoading(false)
 
     if (err) { setError(err.message); return }
+    setDisplayOtp(code)
+    setOtp(['', '', '', '', '', ''])
     setStep(STEP_OTP)
   }
 
@@ -168,7 +172,7 @@ export default function LoginPage() {
             <form onSubmit={handleSendOTP} className="space-y-4 animate-fade-up">
               <div>
                 <h2 className="text-lg font-bold text-stone-900 mb-1">Ilagay ang iyong mobile number</h2>
-                <p className="text-sm text-stone-500">Magpapadala kami ng one-time password (OTP) via SMS.</p>
+                <p className="text-sm text-stone-500">Gagawa kami ng one-time password (OTP) para sa iyong numero.</p>
               </div>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
@@ -188,7 +192,7 @@ export default function LoginPage() {
                 {loading ? <Spinner /> : <>Magpadala ng OTP <ChevronRight className="w-4 h-4" /></>}
               </button>
               <p className="text-xs text-stone-400 text-center">
-                Ginagamit ng SMS ang Semaphore API. Ang iyong numero ay protektado ng RA 10173.
+                Libre ang OTP (ipapakita sa susunod na screen, walang SMS). Protektado ng RA 10173 ang iyong numero.
               </p>
             </form>
           )}
@@ -202,9 +206,16 @@ export default function LoginPage() {
                 </button>
                 <h2 className="text-lg font-bold text-stone-900 mb-1">I-verify ang OTP</h2>
                 <p className="text-sm text-stone-500">
-                  Napadala ang 6-digit code sa <strong>{mobile}</strong>.
+                  Ilagay ang 6-digit code para sa <strong>{mobile}</strong>.
                 </p>
               </div>
+              {displayOtp && (
+                <div className="bg-brand-50 border border-brand-200 rounded-2xl px-4 py-3 text-center">
+                  <p className="text-xs font-semibold text-brand-700 mb-1">Iyong OTP (libre — walang SMS)</p>
+                  <p className="text-2xl font-bold font-mono tracking-[0.3em] text-brand-900">{displayOtp}</p>
+                  <p className="text-xs text-brand-600 mt-1">Mag-e-expire sa 5 minuto</p>
+                </div>
+              )}
               <div className="flex gap-2 justify-between">
                 {otp.map((d, i) => (
                   <input

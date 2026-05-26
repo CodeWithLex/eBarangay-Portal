@@ -3,7 +3,7 @@
 -- Run this entire file in Supabase Dashboard → SQL Editor
 -- ============================================================
 
--- ── 1. OTP Store (for Semaphore custom OTP flow) ──────────
+-- ── 1. OTP Store (free in-app OTP — no SMS) ───────────────
 create table if not exists otp_store (
   mobile      text primary key,
   code        text        not null,
