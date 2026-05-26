@@ -232,6 +232,22 @@ export const requests = {
     }
     const { data, error } = await supabase.from('requests').select('*').eq('id', id).single()
     return { data, error }
+  },
+
+  async updateStatus(id, { status, remarks, reviewed_by }) {
+    if (!supabase) {
+      const idx = _requests.findIndex(r => r.id === id)
+      if (idx === -1) return { error: { message: 'Not found' } }
+      _requests[idx] = { ..._requests[idx], status, remarks, reviewed_by, updated_at: new Date().toISOString() }
+      return { data: _requests[idx], error: null }
+    }
+    const { data, error } = await supabase
+      .from('requests')
+      .update({ status, remarks, reviewed_by, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    return { data, error }
   }
 }
 

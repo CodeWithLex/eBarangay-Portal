@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage'
 import RequestPage from './pages/RequestPage'
 import TrackPage from './pages/TrackPage'
 import VerifyPage from './pages/VerifyPage'
+import StaffDashboard from './pages/StaffDashboard'
 
 // Simple in-app navigation (replace with React Router in production)
 export default function App() {
@@ -30,10 +31,11 @@ export default function App() {
   const navigate = (p) => setPage(p)
 
   const pages = {
-    home:    <HomePage    navigate={navigate} />,
+    home:    user.role === 'resident' ? <HomePage navigate={navigate} /> : <StaffDashboard />,
     request: <RequestPage navigate={navigate} />,
     track:   <TrackPage   navigate={navigate} />,
     verify:  <VerifyPage  navigate={navigate} />,
+    staff:   <StaffDashboard />
   }
 
   return pages[page] ?? pages.home
