@@ -237,11 +237,11 @@ export const requests = {
     return { data, error }
   },
 
-  async updateStatus(id, { status, remarks, reviewed_by, releasing_date, doc_hash, expires_at }) {
+  async updateStatus(id, { status, remarks, reviewed_by, releasing_date, doc_hash, expires_at, step, payment_status }) {
     if (!supabase) {
       const idx = _requests.findIndex(r => r.id === id)
       if (idx === -1) return { error: { message: 'Not found' } }
-      _requests[idx] = { ..._requests[idx], status, remarks, reviewed_by, releasing_date, doc_hash, expires_at, updated_at: new Date().toISOString() }
+      _requests[idx] = { ..._requests[idx], status, remarks, reviewed_by, releasing_date, doc_hash, expires_at, step, payment_status, updated_at: new Date().toISOString() }
       return { data: _requests[idx], error: null }
     }
     const { data, error } = await supabase
@@ -253,6 +253,8 @@ export const requests = {
         releasing_date,
         doc_hash,
         expires_at,
+        step,
+        payment_status,
         updated_at: new Date().toISOString() 
       })
       .eq('id', id)

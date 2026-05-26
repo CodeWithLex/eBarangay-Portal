@@ -4,6 +4,8 @@ import { requests } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { formatDate, formatTime, statusLabel } from '../lib/utils'
 import { BottomNav } from '../lib/BottomNav'
+import { useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 export default function TrackPage({ navigate }) {
   const { user } = useAuth()
@@ -12,8 +14,33 @@ export default function TrackPage({ navigate }) {
     queryKey: ['requests', user?.id],
     queryFn: () => requests.list(user.id).then(r => r.data),
     enabled: !!user,
-    refetchInterval: 30_000, // poll every 30s for status updates
   })
+
+  // Real-time subscription
+  useEffect(() => {
+    if (!supabase || !user?.id) return
+
+    const channel = supabase
+      .channel('public:requests')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'requests',
+          filter: `resident_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('[TrackPage] Realtime Update:', payload)
+          refetch()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id, refetch])
 
   return (
     <div className="min-h-dvh bg-stone-50 flex flex-col max-w-sm mx-auto">
@@ -199,26 +226,26 @@ function StatusBadge({ status }) {
 }
 
 function buildTimeline(req) {
-  const submitted  = { label: 'Naisumite', time: formatDate(req.created_at) + ' · ' + formatTime(req.created_at), done: true }
-  const reviewing  = { label: 'Sinusuri ng staff', time: null, done: ['approved','rejected'].includes(req.status), current: req.status === 'pending' }
-  const approved   = {
-    label: req.status === 'rejected' ? 'Tinanggihan' : 'Naaprubahan',
-    time: req.updated_at !== req.created_at ? formatDate(req.updated_at) : null,
-    done: ['approved','rejected'].includes(req.status),
-    current: false
+  const steps = [
+    { id: 'submitted', label: 'Naisumite', time: formatDate(req.created_at) },
+    { id: 'reviewing', label: 'Sinusuri', time: null },
+    { id: 'payment',   label: 'Pagbabayad', time: null },
+    { id: 'ready',     label: 'Tapos Na', time: req.releasing_date ? formatDate(req.releasing_date) : null },
+  ]
+
+  // Determine current step index
+  const statusToStep = {
+    pending: 1, // reviewing
+    approved: req.step === 'payment' ? 2 : 3, // ready
+    rejected: 1 // reviewing (but badge shows rejected)
   }
-  const releasing = req.releasing_date ? { 
-    label: 'Petsa ng Releasing', 
-    time: formatDate(req.releasing_date) + ' · ' + formatTime(req.releasing_date), 
-    done: req.status === 'approved', 
-    current: false 
-  } : null
-  
-  const ready = { label: 'Dokumento ay handa', time: null, done: req.status === 'approved', current: false }
-  
-  const steps = [submitted, reviewing, approved]
-  if (releasing) steps.push(releasing)
-  steps.push(ready)
-  
-  return steps
+
+  const currentIdx = statusToStep[req.status] ?? 0
+
+  return steps.map((s, idx) => ({
+    ...s,
+    done: idx < currentIdx || (req.status === 'approved' && idx === 3),
+    current: idx === currentIdx && req.status !== 'rejected' && req.status !== 'approved',
+    failed: req.status === 'rejected' && idx === currentIdx
+  }))
 }

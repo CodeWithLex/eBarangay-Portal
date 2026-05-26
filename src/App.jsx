@@ -6,6 +6,7 @@ import RequestPage from './pages/RequestPage'
 import TrackPage from './pages/TrackPage'
 import VerifyPage from './pages/VerifyPage'
 import StaffDashboard from './pages/StaffDashboard'
+import BusinessProfilePage from './pages/BusinessProfilePage'
 
 // Simple in-app navigation (replace with React Router in production)
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
     request: <RequestPage navigate={navigate} />,
     track:   <TrackPage   navigate={navigate} />,
     verify:  <VerifyPage  navigate={navigate} />,
+    business: <BusinessProfilePage navigate={navigate} />,
     staff:   <StaffDashboard />
   }
 

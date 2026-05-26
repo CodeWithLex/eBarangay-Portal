@@ -78,14 +78,16 @@ export default function StaffDashboard() {
 
   // Update status mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ id, status, remarks, releasing_date, doc_hash, expires_at }) => {
+    mutationFn: async ({ id, status, remarks, releasing_date, doc_hash, expires_at, step, payment_status }) => {
       const { data, error } = await requests.updateStatus(id, { 
         status, 
         remarks, 
         reviewed_by: user.id,
         releasing_date,
         doc_hash,
-        expires_at
+        expires_at,
+        step,
+        payment_status
       })
       if (error) throw error
       return data
@@ -276,7 +278,12 @@ function RequestCard({ req, onClick }) {
       </div>
 
       <p className="font-bold text-stone-900 leading-tight mb-1">{req.document_type}</p>
-      <p className="text-[10px] font-mono text-stone-400 mb-4">{req.reference_no}</p>
+      <div className="flex items-center gap-2 mb-4">
+        <p className="text-[10px] font-mono text-stone-400">{req.reference_no}</p>
+        {req.business_id && (
+          <span className="text-[8px] bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Business</span>
+        )}
+      </div>
 
       <div className="mt-auto pt-4 border-t border-stone-50 flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-[10px] font-bold text-stone-500">
@@ -295,6 +302,8 @@ function ReviewModal({ req, onClose, onUpdate, isPending }) {
   const [remarks, setRemarks] = useState(req.remarks || '')
   const [releasingDate, setReleasingDate] = useState(req.releasing_date ? req.releasing_date.split('T')[0] : '')
   const [releasingTime, setReleasingTime] = useState(req.releasing_date ? new Date(req.releasing_date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '09:00')
+  const [step, setStep] = useState(req.step || 'submitted')
+  const [paymentStatus, setPaymentStatus] = useState(req.payment_status || 'unpaid')
   
   const handleAction = async (status) => {
     if (status === 'rejected' && !remarks.trim()) {
@@ -321,7 +330,9 @@ function ReviewModal({ req, onClose, onUpdate, isPending }) {
       remarks, 
       releasing_date: finalReleasingDate,
       doc_hash,
-      expires_at
+      expires_at,
+      step,
+      payment_status: paymentStatus
     })
   }
 
@@ -406,6 +417,39 @@ function ReviewModal({ req, onClose, onUpdate, isPending }) {
                   />
                 </div>
                 <p className="text-[9px] text-stone-400 mt-1 px-1">Petsa at oras kung kailan maaaring kunin ang dokumento.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block mb-2">Workflow Step</label>
+                  <select 
+                    className="field text-xs h-12"
+                    value={step}
+                    onChange={e => setStep(e.target.value)}
+                  >
+                    <option value="submitted">Submitted</option>
+                    <option value="reviewing">Reviewing</option>
+                    <option value="payment">Payment Needed</option>
+                    <option value="ready">Ready for Pickup</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-stone-400 tracking-widest block mb-2">Payment Status</label>
+                  <div className="flex bg-stone-100 rounded-xl p-1">
+                    <button 
+                      onClick={() => setPaymentStatus('unpaid')}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${paymentStatus === 'unpaid' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400'}`}
+                    >
+                      Unpaid
+                    </button>
+                    <button 
+                      onClick={() => setPaymentStatus('paid')}
+                      className={`flex-1 py-2 rounded-lg text-[10px] font-bold ${paymentStatus === 'paid' ? 'bg-brand-500 text-white' : 'text-stone-400'}`}
+                    >
+                      Paid
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div>

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Upload, CheckCircle, FileText, ChevronDown, AlertCircle } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Upload, CheckCircle, FileText, ChevronDown, AlertCircle, Building2, User } from 'lucide-react'
 import { supabase, requests, DOCUMENT_TYPES } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { BottomNav } from '../lib/BottomNav'
@@ -20,10 +20,23 @@ export default function RequestPage({ navigate }) {
   const queryClient = useQueryClient()
   const fileRef = useRef()
 
+  const [stream, setStream] = useState('personal') // 'personal' or 'business'
+  const [selectedBusiness, setSelectedBusiness] = useState(null)
   const [file, setFile] = useState(null)
   const [consent, setConsent] = useState(false)
   const [errors, setErrors] = useState({})
   const [success, setSuccess] = useState(null)
+
+  // Fetch businesses for the selector
+  const { data: businesses = [] } = useQuery({
+    queryKey: ['businesses', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('business_profiles').select('*').eq('owner_id', user.id)
+      if (error) throw error
+      return data
+    },
+    enabled: !!user?.id
+  })
 
   const { register, handleSubmit, watch, setValue, formState: { errors: formErrors } } = useForm({
     resolver: zodResolver(requestSchema),
@@ -71,11 +84,14 @@ export default function RequestPage({ navigate }) {
         document_type: data.document_type,
         purpose: data.purpose,
         resident_id: user.id,
+        business_id: stream === 'business' ? selectedBusiness : null,
         file_url,
         metadata: {
           age: data.age,
-          occupation: data.occupation
-        }
+          occupation: data.occupation,
+          is_business: stream === 'business'
+        },
+        step: 'submitted'
       })
     },
     onSuccess: (result) => {
@@ -178,6 +194,62 @@ export default function RequestPage({ navigate }) {
 
       <form onSubmit={handleSubmit(onFormSubmit)} className="flex-1 flex flex-col">
         <div className="flex-1 px-4 py-5 space-y-5">
+          {/* Stream Selector */}
+          <div className="flex bg-stone-100 rounded-2xl p-1.5 shadow-inner">
+            <button
+              type="button"
+              onClick={() => { setStream('personal'); setSelectedBusiness(null); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${
+                stream === 'personal' ? 'bg-white text-stone-900 shadow' : 'text-stone-500'
+              }`}
+            >
+              <User size={14} /> Personal
+            </button>
+            <button
+              type="button"
+              onClick={() => setStream('business')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all ${
+                stream === 'business' ? 'bg-white text-stone-900 shadow' : 'text-stone-500'
+              }`}
+            >
+              <Building2 size={14} /> Business
+            </button>
+          </div>
+
+          {stream === 'business' && (
+            <div className="animate-in slide-in-from-top-2 duration-300">
+              <p className="section-label mb-2">Select Registered Business</p>
+              {businesses.length === 0 ? (
+                <div 
+                  onClick={() => navigate('business')}
+                  className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center cursor-pointer group"
+                >
+                  <p className="text-xs text-amber-700 mb-1">Wala pang nakarehistrong negosyo.</p>
+                  <p className="text-[10px] font-bold text-amber-600 group-hover:underline">I-rehistro ang negosyo dito →</p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {businesses.map(b => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBusiness(b.id)}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${
+                        selectedBusiness === b.id ? 'border-brand-500 bg-brand-50' : 'border-stone-200 bg-white'
+                      }`}
+                    >
+                      <Building2 size={14} className={selectedBusiness === b.id ? 'text-brand-600' : 'text-stone-400'} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-stone-800 truncate">{b.name}</p>
+                        <p className="text-[9px] text-stone-400">{b.tin || 'No TIN'}</p>
+                      </div>
+                      {selectedBusiness === b.id && <CheckCircle size={14} className="text-brand-500" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Document type selector */}
           <div>
@@ -258,16 +330,16 @@ export default function RequestPage({ navigate }) {
             </div>
           </div>
 
-          {/* Valid ID upload */}
+          {/* Valid ID / Business Document upload */}
           <div>
-            <p className="section-label">Valid ID</p>
+            <p className="section-label">{stream === 'business' ? 'DTI / Business Permit Proof' : 'Valid ID'}</p>
             <input
               ref={fileRef}
               type="file"
               accept=".png,.jpg,.jpeg,.pdf"
               className="sr-only"
               onChange={handleFileChange}
-              aria-label="Upload valid ID"
+              aria-label="Upload document"
             />
             <button
               type="button"
@@ -289,14 +361,19 @@ export default function RequestPage({ navigate }) {
               ) : (
                 <>
                   <Upload className="w-8 h-8 text-stone-400 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-stone-700">Mag-upload ng Valid ID</p>
+                  <p className="text-sm font-semibold text-stone-700">
+                    {stream === 'business' ? 'Mag-upload ng DTI/Permit' : 'Mag-upload ng Valid ID'}
+                  </p>
                   <p className="text-xs text-stone-400 mt-1">PNG, JPG, o PDF · Max 5MB</p>
                   <p className="text-xs text-stone-400">i-tap para pumili ng file</p>
                 </>
               )}
             </button>
             <p className="text-xs text-stone-400 mt-1.5 pl-1">
-              Tinatanggap: PhilSys ID, Driver's License, Passport, Voter's ID, SSS/GSIS ID
+              {stream === 'business' 
+                ? 'Tinatanggap: DTI Certificate, Mayor\'s Permit, o BIR Registration'
+                : 'Tinatanggap: PhilSys ID, Driver\'s License, Passport, Voter\'s ID'
+              }
             </p>
             {errors.file && <FieldError msg={errors.file} />}
           </div>

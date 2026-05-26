@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Bell, Plus, ChevronRight, FileText, Clock, CheckCircle, XCircle, Download, QrCode } from 'lucide-react'
+import { Bell, Plus, ChevronRight, FileText, Clock, CheckCircle, XCircle, Download, QrCode, Building2 } from 'lucide-react'
 import { requests } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { formatDate, statusPillClass, statusLabel } from '../lib/utils'
@@ -69,13 +69,19 @@ export default function HomePage({ navigate }) {
         </div>
       </div>
 
-      {/* Quick action */}
-      <div className="px-4 py-3">
+      {/* Quick actions */}
+      <div className="px-4 py-3 space-y-2">
         <button
           onClick={() => navigate('request')}
           className="btn-primary"
         >
           <Plus className="w-5 h-5" /> Mag-request ng Dokumento
+        </button>
+        <button
+          onClick={() => navigate('business')}
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white border border-stone-200 text-stone-600 text-sm font-bold shadow-sm active:scale-95 transition-all"
+        >
+          <Building2 className="w-4 h-4 text-brand-600" /> Manage My Businesses
         </button>
       </div>
 
