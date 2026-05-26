@@ -18,29 +18,45 @@ export default function RequestPage({ navigate }) {
 
   const mutation = useMutation({
     mutationFn: async ({ form, file }) => {
+      if (!user?.id) {
+        return { data: null, error: { message: 'Hindi ka naka-login. Mag-login muli.' } }
+      }
+
       let file_url = null
       if (file && supabase) {
         const fileExt = file.name.split('.').pop()
         const fileName = `${user.id}/${Date.now()}.${fileExt}`
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('valid-ids')
-          .upload(fileName, file)
+          .upload(fileName, file, { upsert: false })
 
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          const msg = uploadError.message?.includes('Bucket not found')
+            ? 'Hindi pa naka-setup ang storage. Run 003_storage_valid_ids.sql sa Supabase SQL Editor.'
+            : uploadError.message
+          return { data: null, error: { message: msg } }
+        }
         file_url = fileName
       }
 
       return requests.submit({
-        ...form,
+        document_type: form.document_type,
+        purpose: form.purpose,
         resident_id: user.id,
-        file_url
+        file_url,
       })
     },
-    onSuccess: ({ data, error }) => {
-      if (error) { setErrors({ submit: error.message }); return }
+    onSuccess: (result) => {
+      if (result?.error) {
+        setErrors({ submit: result.error.message })
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['requests'] })
-      setSuccess(data)
-    }
+      setSuccess(result.data)
+    },
+    onError: (err) => {
+      setErrors({ submit: err?.message || 'Hindi naisumite ang hiling. Subukan muli.' })
+    },
   })
 
   function validate() {

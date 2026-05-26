@@ -26,9 +26,11 @@ Run `supabase/migrations/001_initial_schema.sql` in your **Supabase → SQL Edit
 
 If you see **`consented_at` column not found**, also run `002_add_consented_at.sql`.
 
-### 3. Supabase Storage
+### 3. Supabase Storage (required for document requests)
 
-Create a private bucket named `valid-ids` in **Storage** and apply the RLS policies at the bottom of the migration file.
+Run `supabase/migrations/003_storage_valid_ids.sql` in **Supabase → SQL Editor**.
+
+This creates the `valid-ids` bucket and upload policies. Without it, **Isumite ang Hiling** will fail when uploading your ID.
 
 ### 4. Edge Functions (free OTP)
 
