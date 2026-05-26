@@ -27,16 +27,20 @@ export default function StaffDashboard() {
   const [selectedRequest, setSelectedRequest] = useState(null)
 
   // Fetch all requests
-  const { data: allRequests = [], isLoading } = useQuery({
+  const { data: allRequests = [], isLoading, error: queryError } = useQuery({
     queryKey: ['admin-requests'],
     queryFn: async () => {
-      if (!supabase) return [] // Mock empty or use internal mock list
+      if (!supabase) return []
       const { data, error } = await supabase
         .from('requests')
         .select('*, profiles(full_name, mobile, purok)')
         .order('created_at', { ascending: false })
-      if (error) throw error
-      return data
+      if (error) {
+        console.error('[StaffDashboard] query error:', error)
+        throw error
+      }
+      console.log('[StaffDashboard] fetched', data?.length, 'requests')
+      return data ?? []
     }
   })
 
@@ -126,6 +130,13 @@ export default function StaffDashboard() {
 
         {/* Request List */}
         <div className="flex-1 overflow-y-auto p-6">
+          {queryError && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-700">
+              <p className="font-bold mb-1">⚠️ Database Error</p>
+              <p className="font-mono text-xs">{queryError.message}</p>
+              <p className="text-xs mt-2 text-red-600">Run <strong>006_staff_rls_fix.sql</strong> in Supabase SQL Editor to fix this.</p>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {isLoading ? (
               [1,2,3,4,5,6].map(i => <div key={i} className="h-40 rounded-2xl bg-white animate-pulse border border-stone-200" />)
